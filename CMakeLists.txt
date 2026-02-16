@@ -1898,8 +1898,9 @@ endif()
 add_library(liblove SHARED
 	src/modules/love/love.cpp
 	src/modules/love/love.h
-	# JNI entry points for Android Fragment lifecycle (must be in shared lib
-	# so the linker doesn't strip unreferenced symbols from a static archive).
+	# ALTERED: JNI entry points for Android Fragment lifecycle, added by Dopple
+	# (dopple.com) with LLM assistance (Claude, Anthropic). Must be in shared
+	# lib so the linker doesn't strip unreferenced symbols from a static archive.
 	src/common/android_fragment.cpp
 	src/common/android_fragment.h
 	# These are here so they show up in Visual Studio:

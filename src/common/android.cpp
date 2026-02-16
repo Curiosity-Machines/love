@@ -18,6 +18,17 @@
  * 3. This notice may not be removed or altered from any source distribution.
  **/
 
+/**
+ * ALTERED SOURCE NOTICE: This file has been modified from the original Love2D
+ * distribution by Dopple (dopple.com). Changes add fragment-mode fallbacks so
+ * SDL_GetAndroidActivity()/SDL_GetAndroidJNIEnv() calls degrade gracefully
+ * when Love2D runs inside an Android Fragment instead of SDLActivity.
+ *
+ * These modifications were generated with assistance from an LLM (Claude,
+ * Anthropic) and reviewed by Dopple engineers. See the project README for
+ * contributor disclosure policy.
+ **/
+
 #include "android.h"
 #include "android_fragment.h"
 #include "Object.h"

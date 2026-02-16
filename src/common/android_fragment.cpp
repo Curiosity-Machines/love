@@ -18,6 +18,16 @@
  * 3. This notice may not be removed or altered from any source distribution.
  **/
 
+/**
+ * ALTERED SOURCE NOTICE: This file is not part of the original Love2D
+ * distribution. It was created by Dopple (dopple.com) to support embedding
+ * Love2D inside an Android Fragment rather than a standalone SDLActivity.
+ *
+ * This file was generated with assistance from an LLM (Claude, Anthropic)
+ * and reviewed by Dopple engineers. See the project README for contributor
+ * disclosure policy.
+ **/
+
 #include "android_fragment.h"
 
 #ifdef LOVE_ANDROID
