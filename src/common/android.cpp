@@ -46,12 +46,47 @@ namespace love
 namespace android
 {
 
+// Returns a valid JNIEnv for the current thread. Falls back to
+// AttachCurrentThread when SDL_GetAndroidJNIEnv() returns NULL
+// (e.g., on the LoveMain thread in fragment mode).
+static JNIEnv *getJNIEnv()
+{
+	JNIEnv *env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+	if (env == nullptr)
+	{
+		JavaVM *vm = (JavaVM *)fragment::getJavaVM();
+		if (vm != nullptr)
+			vm->AttachCurrentThread(&env, nullptr);
+	}
+	return env;
+}
+
+// Returns the Android Context as a JNI local ref. Tries SDL first,
+// falls back to the fragment context. Caller must DeleteLocalRef.
+// Returns nullptr if neither SDL nor fragment is active.
+static jobject getContext()
+{
+	jobject ctx = (jobject)SDL_GetAndroidActivity();
+	if (ctx != nullptr)
+		return ctx; // SDL owns it — already a local ref
+
+	jobject globalRef = (jobject)fragment::getActivity();
+	if (globalRef != nullptr)
+	{
+		JNIEnv *env = getJNIEnv();
+		if (env != nullptr)
+			return env->NewLocalRef(globalRef);
+	}
+	return nullptr;
+}
+
 void setImmersive(bool immersive_active)
 {
-	JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+	JNIEnv *env = getJNIEnv();
 	jobject activity = (jobject) SDL_GetAndroidActivity();
-	jclass clazz = env->GetObjectClass(activity);
+	if (activity == nullptr) return; // SDLActivity-specific
 
+	jclass clazz = env->GetObjectClass(activity);
 	static jmethodID setImmersiveMethod = env->GetMethodID(clazz, "setImmersiveMode", "(Z)V");
 	env->CallVoidMethod(activity, setImmersiveMethod, immersive_active);
 
@@ -61,10 +96,11 @@ void setImmersive(bool immersive_active)
 
 bool getImmersive()
 {
-	JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+	JNIEnv *env = getJNIEnv();
 	jobject activity = (jobject) SDL_GetAndroidActivity();
-	jclass clazz = env->GetObjectClass(activity);
+	if (activity == nullptr) return false;
 
+	jclass clazz = env->GetObjectClass(activity);
 	static jmethodID getImmersiveMethod = env->GetMethodID(clazz, "getImmersiveMode", "()Z");
 	jboolean immersiveActive = env->CallBooleanMethod(activity, getImmersiveMethod);
 
@@ -80,10 +116,11 @@ double getScreenScale()
 
 	if (result == -1.)
 	{
-		JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+		JNIEnv *env = getJNIEnv();
 		jobject activity = (jobject) SDL_GetAndroidActivity();
-		jclass clazz = env->GetObjectClass(activity);
+		if (activity == nullptr) return 1.0;
 
+		jclass clazz = env->GetObjectClass(activity);
 		jmethodID getDPIMethod = env->GetMethodID(clazz, "getDPIScale", "()F");
 		result = (double) env->CallFloatMethod(activity, getDPIMethod);
 
@@ -96,8 +133,10 @@ double getScreenScale()
 
 bool getSafeArea(int &top, int &left, int &bottom, int &right)
 {
-	JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+	JNIEnv *env = getJNIEnv();
 	jobject activity = (jobject) SDL_GetAndroidActivity();
+	if (activity == nullptr) return false;
+
 	jclass clazz = env->GetObjectClass(activity);
     jclass rectClass = env->FindClass("android/graphics/Rect");
     jmethodID methodID = env->GetMethodID(clazz, "getSafeArea", "()Landroid/graphics/Rect;");
@@ -121,10 +160,11 @@ bool getSafeArea(int &top, int &left, int &bottom, int &right)
 
 void vibrate(double seconds)
 {
-	JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+	JNIEnv *env = getJNIEnv();
 	jobject activity = (jobject) SDL_GetAndroidActivity();
-	jclass clazz = env->GetObjectClass(activity);
+	if (activity == nullptr) return;
 
+	jclass clazz = env->GetObjectClass(activity);
 	static jmethodID vibrateMethod = env->GetMethodID(clazz, "vibrate", "(D)V");
 	env->CallVoidMethod(activity, vibrateMethod, seconds);
 
@@ -253,8 +293,9 @@ void fixupExternalStoragePermission(const std::string &savedir, const std::strin
 
 bool hasBackgroundMusic()
 {
-	JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+	JNIEnv *env = getJNIEnv();
 	jobject activity = (jobject) SDL_GetAndroidActivity();
+	if (activity == nullptr) return false;
 
 	jclass clazz(env->GetObjectClass(activity));
 	jmethodID method_id = env->GetMethodID(clazz, "hasBackgroundMusic", "()Z");
@@ -269,10 +310,11 @@ bool hasBackgroundMusic()
 
 bool hasRecordingPermission()
 {
-	JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+	JNIEnv *env = getJNIEnv();
 	jobject activity = (jobject) SDL_GetAndroidActivity();
-	jclass clazz = env->GetObjectClass(activity);
+	if (activity == nullptr) return false;
 
+	jclass clazz = env->GetObjectClass(activity);
 	static jmethodID methodID = env->GetMethodID(clazz, "hasRecordAudioPermission", "()Z");
 	jboolean result = false;
 
@@ -290,8 +332,10 @@ bool hasRecordingPermission()
 
 void requestRecordingPermission()
 {
-	JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+	JNIEnv *env = getJNIEnv();
 	jobject activity = (jobject) SDL_GetAndroidActivity();
+	if (activity == nullptr) return;
+
 	jclass clazz(env->GetObjectClass(activity));
 	jmethodID methodID = env->GetMethodID(clazz, "requestRecordAudioPermission", "()V");
 
@@ -306,8 +350,10 @@ void requestRecordingPermission()
 
 void showRecordingPermissionMissingDialog()
 {
-	JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+	JNIEnv *env = getJNIEnv();
 	jobject activity = (jobject) SDL_GetAndroidActivity();
+	if (activity == nullptr) return;
+
 	jclass clazz(env->GetObjectClass(activity));
 	jmethodID methodID = env->GetMethodID(clazz, "showRecordingAudioPermissionMissingDialog", "()V");
 
@@ -326,8 +372,9 @@ class AssetManagerObject
 public:
 	AssetManagerObject()
 	{
-		JNIEnv *env = (JNIEnv *) SDL_GetAndroidJNIEnv();
+		JNIEnv *env = getJNIEnv();
 		jobject am = getLocalAssetManager(env);
+		if (am == nullptr) { assetManager = nullptr; return; }
 
 		assetManager = env->NewGlobalRef(am);
 		env->DeleteLocalRef(am);
@@ -335,18 +382,23 @@ public:
 
 	~AssetManagerObject()
 	{
-		JNIEnv *env = (JNIEnv *) SDL_GetAndroidJNIEnv();
-		env->DeleteGlobalRef(assetManager);
+		if (assetManager == nullptr) return;
+		JNIEnv *env = getJNIEnv();
+		if (env != nullptr)
+			env->DeleteGlobalRef(assetManager);
 	}
 
+	// getAssets() is on android.content.Context — works with any Context.
 	static jobject getLocalAssetManager(JNIEnv *env) {
-		jobject self = (jobject) SDL_GetAndroidActivity();
-		jclass activity = env->GetObjectClass(self);
-		jmethodID method = env->GetMethodID(activity, "getAssets", "()Landroid/content/res/AssetManager;");
-		jobject am = env->CallObjectMethod(self, method);
+		jobject ctx = getContext();
+		if (ctx == nullptr) return nullptr;
 
-		env->DeleteLocalRef(self);
-		env->DeleteLocalRef(activity);
+		jclass clazz = env->GetObjectClass(ctx);
+		jmethodID method = env->GetMethodID(clazz, "getAssets", "()Landroid/content/res/AssetManager;");
+		jobject am = env->CallObjectMethod(ctx, method);
+
+		env->DeleteLocalRef(ctx);
+		env->DeleteLocalRef(clazz);
 		return am;
 	}
 
@@ -371,8 +423,10 @@ static jobject getJavaAssetManager()
 
 static AAssetManager *getAssetManager()
 {
-	JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
-	return AAssetManager_fromJava(env, (jobject) getJavaAssetManager());
+	JNIEnv *env = getJNIEnv();
+	jobject jam = getJavaAssetManager();
+	if (env == nullptr || jam == nullptr) return nullptr;
+	return AAssetManager_fromJava(env, jam);
 }
 
 namespace aasset
@@ -485,27 +539,30 @@ void *openArchive(PHYSFS_Io *io, const char *name, int forWrite, int *claimed)
 	{
 		// AAssetDir_getNextFileName intentionally excludes directories, so
 		// we have to use JNI that calls AssetManager.list() recursively.
-		JNIEnv *env = (JNIEnv *) SDL_GetAndroidJNIEnv();
+		// buildFileTree is an SDLActivity-specific method.
+		JNIEnv *env = getJNIEnv();
 		jobject activity = (jobject) SDL_GetAndroidActivity();
-		jclass clazz = env->GetObjectClass(activity);
-
-		jmethodID method = env->GetMethodID(clazz, "buildFileTree", "()[Ljava/lang/String;");
-		jobjectArray list = (jobjectArray) env->CallObjectMethod(activity, method);
-
-		for (jsize i = 0; i < env->GetArrayLength(list); i++)
+		if (activity != nullptr)
 		{
-			jstring jstr = (jstring) env->GetObjectArrayElement(list, i);
-			const char *str = env->GetStringUTFChars(jstr, nullptr);
+			jclass clazz = env->GetObjectClass(activity);
+			jmethodID method = env->GetMethodID(clazz, "buildFileTree", "()[Ljava/lang/String;");
+			jobjectArray list = (jobjectArray) env->CallObjectMethod(activity, method);
 
-			fileTree[str + 1] = str[0] == 'd' ? PHYSFS_FILETYPE_DIRECTORY : PHYSFS_FILETYPE_REGULAR;
+			for (jsize i = 0; i < env->GetArrayLength(list); i++)
+			{
+				jstring jstr = (jstring) env->GetObjectArrayElement(list, i);
+				const char *str = env->GetStringUTFChars(jstr, nullptr);
 
-			env->ReleaseStringUTFChars(jstr, str);
-			env->DeleteLocalRef(jstr);
+				fileTree[str + 1] = str[0] == 'd' ? PHYSFS_FILETYPE_DIRECTORY : PHYSFS_FILETYPE_REGULAR;
+
+				env->ReleaseStringUTFChars(jstr, str);
+				env->DeleteLocalRef(jstr);
+			}
+
+			env->DeleteLocalRef(list);
+			env->DeleteLocalRef(clazz);
+			env->DeleteLocalRef(activity);
 		}
-
-		env->DeleteLocalRef(list);
-		env->DeleteLocalRef(clazz);
-		env->DeleteLocalRef(activity);
 	}
 
 	return assetManager;
@@ -537,7 +594,7 @@ PHYSFS_EnumerateCallbackResult enumerate(
 		}
 	}
 
-	JNIEnv *env = (JNIEnv *) SDL_GetAndroidJNIEnv();
+	JNIEnv *env = getJNIEnv();
 	jobject assetManager = getJavaAssetManager();
 	jclass clazz = env->GetObjectClass(assetManager);
 	jmethodID method = env->GetMethodID(clazz, "list", "(Ljava/lang/String;)[Ljava/lang/String;");
@@ -829,10 +886,16 @@ const char *getCRequirePath()
 
 	if (!initialized)
 	{
-		JNIEnv *env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+		// getCRequirePath is an SDLActivity-specific method.
+		JNIEnv *env = getJNIEnv();
 		jobject activity = (jobject) SDL_GetAndroidActivity();
-		jclass clazz = env->GetObjectClass(activity);
+		if (activity == nullptr)
+		{
+			initialized = true;
+			return path.c_str();
+		}
 
+		jclass clazz = env->GetObjectClass(activity);
 		static jmethodID getCRequireMethod = env->GetMethodID(clazz, "getCRequirePath", "()Ljava/lang/String;");
 
 		jstring cpath = (jstring) env->CallObjectMethod(activity, getCRequireMethod);
@@ -860,28 +923,8 @@ void *getIOFromContentProtocol(const char *uri)
 const char *getArg0()
 {
 	static PHYSFS_AndroidInit androidInit = {nullptr, nullptr};
-	androidInit.jnienv = SDL_GetAndroidJNIEnv();
-	androidInit.context = SDL_GetAndroidActivity();
-
-	// In fragment mode, SDL doesn't own the Activity so both return NULL.
-	// Use the context stored during fragment::init() and attach the
-	// current thread (LoveMain) to the JVM to get a valid JNIEnv.
-	if (androidInit.context == nullptr)
-	{
-		JavaVM *vm = (JavaVM *)fragment::getJavaVM();
-		if (vm != nullptr)
-		{
-			androidInit.context = fragment::getActivity();
-
-			if (androidInit.jnienv == nullptr)
-			{
-				JNIEnv *env = nullptr;
-				vm->AttachCurrentThread(&env, nullptr);
-				androidInit.jnienv = env;
-			}
-		}
-	}
-
+	androidInit.jnienv = getJNIEnv();
+	androidInit.context = getContext();
 	return (const char *) &androidInit;
 }
 
