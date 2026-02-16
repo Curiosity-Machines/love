@@ -76,13 +76,25 @@ cmake --build "$BUILD_DIR" --parallel "$(sysctl -n hw.ncpu)" --target love
 
 echo "=== Build Complete ==="
 
-# Find and report the output
-LIBLOVE_SO=$(find "$BUILD_DIR" -name "liblove.so" -o -name "love.so" | head -1)
-if [ -n "$LIBLOVE_SO" ]; then
-    echo "Output: $LIBLOVE_SO"
-    echo "Size: $(du -h "$LIBLOVE_SO" | cut -f1)"
-else
-    echo "WARNING: liblove.so not found in build output"
-    echo "Checking for shared libraries..."
-    find "$BUILD_DIR" -name "*.so" | head -20
-fi
+# Assemble dist: all .so files babbage needs, in jniLibs layout.
+# babbage can point jniLibs.srcDirs at dist/android/ or symlink.
+DIST_DIR="${LOVE_DIR}/dist/android/jniLibs/${ANDROID_ABI}"
+rm -rf "${LOVE_DIR}/dist/android"
+mkdir -p "$DIST_DIR"
+
+# libliblove.so is the full engine (JNI symbols, all modules).
+# Rename to liblove.so so System.loadLibrary("love") finds it.
+cp "$BUILD_DIR/love/libliblove.so" "$DIST_DIR/liblove.so"
+
+# Companion shared libraries (NEEDED by liblove.so)
+cp "$BUILD_DIR/love/RelWithDebInfo/libSDL3.so" "$DIST_DIR/"
+cp "$BUILD_DIR/love/RelWithDebInfo/libopenal.so" "$DIST_DIR/"
+cp "$MEGASOURCE_DIR/libs/LuaJIT/android/${ANDROID_ABI}/libluajit.so" "$DIST_DIR/"
+# libc++_shared.so is provided by Gradle from the NDK — do not bundle.
+
+echo "=== Dist ==="
+echo "  Output: $DIST_DIR"
+ls -lh "$DIST_DIR"
+echo ""
+echo "Babbage integration: add to app/build.gradle.kts:"
+echo "  sourceSets { main { jniLibs.srcDirs += \"<path-to-lovelace>/dist/android/jniLibs\" } }"

@@ -76,6 +76,34 @@ via `SDL_WaitThread()`.
 
 - `src/common/android_fragment.h` -- Header declaring the fragment lifecycle interface
 - `src/common/android_fragment.cpp` -- Implementation with JNI entry points and Love2D thread management
+- `scripts/build-android.sh` -- Builds liblove.so and assembles dist artifacts
+
+## Artifact Distribution
+
+`scripts/build-android.sh` builds Love2D and assembles a `dist/` directory:
+
+```
+dist/android/jniLibs/arm64-v8a/
+  liblove.so      -- Love2D engine (renamed from libliblove.so, has JNI symbols)
+  libSDL3.so      -- SDL3 runtime
+  libopenal.so    -- OpenAL audio
+  libluajit.so    -- LuaJIT (prebuilt from megasource)
+```
+
+The host app (babbage) adds this as a jniLibs source directory in `build.gradle.kts`:
+
+```kotlin
+sourceSets {
+    getByName("main") {
+        jniLibs.srcDir(rootProject.file("$loveDir/dist/android/jniLibs"))
+    }
+}
+```
+
+No CMake is needed on the host side. `System.loadLibrary("love")` loads
+`liblove.so` which contains all JNI entry points. The companion `.so` files
+(SDL3, OpenAL, LuaJIT) are bundled into the APK automatically by Gradle.
+`libc++_shared.so` is provided by the NDK via Gradle's STL packaging.
 
 ## Important Notes
 
