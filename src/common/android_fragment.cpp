@@ -49,6 +49,8 @@ namespace fragment
 static SDL_Thread *loveThread = nullptr;
 static std::string lovePath;
 static std::atomic<bool> quitRequested{false};
+static JavaVM *javaVM = nullptr;
+static jobject activityRef = nullptr; // global ref
 
 // Forward declaration of Love2D main loop runner
 static int loveThreadFunc(void *data);
@@ -64,13 +66,19 @@ static int love_preload(lua_State *L, lua_CFunction f, const char *name)
 	return 0;
 }
 
-void init(JNIEnv *env, const char *path)
+void init(JNIEnv *env, jobject context, const char *path)
 {
 	if (loveThread != nullptr)
 	{
 		SDL_Log("Love2D: init called but already running");
 		return;
 	}
+
+	// Store JavaVM and Context for use on the LoveMain thread.
+	// getArg0() needs these since SDL_GetAndroidActivity() returns NULL
+	// in fragment mode (SDL doesn't own the Activity).
+	env->GetJavaVM(&javaVM);
+	activityRef = env->NewGlobalRef(context);
 
 	lovePath = path;
 	quitRequested = false;
@@ -118,7 +126,33 @@ void quit()
 		loveThread = nullptr;
 	}
 
+	// Release the Activity global ref.
+	if (activityRef != nullptr && javaVM != nullptr)
+	{
+		JNIEnv *env = nullptr;
+		javaVM->GetEnv((void **)&env, JNI_VERSION_1_6);
+		if (env != nullptr)
+			env->DeleteGlobalRef(activityRef);
+		activityRef = nullptr;
+	}
+
+	javaVM = nullptr;
 	lovePath.clear();
+}
+
+bool isActive()
+{
+	return loveThread != nullptr || activityRef != nullptr;
+}
+
+void *getJavaVM()
+{
+	return javaVM;
+}
+
+void *getActivity()
+{
+	return activityRef;
 }
 
 static int loveThreadFunc(void *data)
@@ -200,10 +234,24 @@ JNIEXPORT void JNICALL
 Java_com_dopple_webview_ui_love_Love2dGameFragment_nativeInit(
 	JNIEnv *env, jobject thiz, jstring lovePath)
 {
-	(void)thiz;
+	// thiz is the Fragment. Get Context for PhysFS initialization.
+	// Fragment.getContext() returns android.content.Context.
+	jclass fragClass = env->GetObjectClass(thiz);
+	jmethodID getCtx = env->GetMethodID(fragClass, "getContext", "()Landroid/content/Context;");
+	jobject context = env->CallObjectMethod(thiz, getCtx);
+	env->DeleteLocalRef(fragClass);
+
+	// Use the application context so the ref outlives the Fragment.
+	jclass ctxClass = env->GetObjectClass(context);
+	jmethodID getAppCtx = env->GetMethodID(ctxClass, "getApplicationContext", "()Landroid/content/Context;");
+	jobject appContext = env->CallObjectMethod(context, getAppCtx);
+	env->DeleteLocalRef(ctxClass);
+	env->DeleteLocalRef(context);
+
 	const char *path = env->GetStringUTFChars(lovePath, nullptr);
-	love::android::fragment::init(env, path);
+	love::android::fragment::init(env, appContext, path);
 	env->ReleaseStringUTFChars(lovePath, path);
+	env->DeleteLocalRef(appContext);
 }
 
 JNIEXPORT void JNICALL

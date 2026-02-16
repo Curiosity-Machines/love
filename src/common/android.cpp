@@ -19,6 +19,7 @@
  **/
 
 #include "android.h"
+#include "android_fragment.h"
 #include "Object.h"
 
 #ifdef LOVE_ANDROID
@@ -861,6 +862,26 @@ const char *getArg0()
 	static PHYSFS_AndroidInit androidInit = {nullptr, nullptr};
 	androidInit.jnienv = SDL_GetAndroidJNIEnv();
 	androidInit.context = SDL_GetAndroidActivity();
+
+	// In fragment mode, SDL doesn't own the Activity so both return NULL.
+	// Use the context stored during fragment::init() and attach the
+	// current thread (LoveMain) to the JVM to get a valid JNIEnv.
+	if (androidInit.context == nullptr)
+	{
+		JavaVM *vm = (JavaVM *)fragment::getJavaVM();
+		if (vm != nullptr)
+		{
+			androidInit.context = fragment::getActivity();
+
+			if (androidInit.jnienv == nullptr)
+			{
+				JNIEnv *env = nullptr;
+				vm->AttachCurrentThread(&env, nullptr);
+				androidInit.jnienv = env;
+			}
+		}
+	}
+
 	return (const char *) &androidInit;
 }
 

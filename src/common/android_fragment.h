@@ -37,7 +37,8 @@ namespace fragment
 // Start Love2D with a .love file from a filesystem path.
 // Called from Love2dGameFragment.nativeInit(lovePath).
 // Spawns a new thread that runs the Love2D main loop.
-void init(JNIEnv *env, const char *lovePath);
+// context: Application Context (global ref will be taken).
+void init(JNIEnv *env, jobject context, const char *lovePath);
 
 // Pause Love2D (Fragment.onPause).
 // Injects SDL_EVENT_WINDOW_MINIMIZED to pause audio/rendering.
@@ -50,6 +51,17 @@ void resume();
 // Quit Love2D (Fragment.onDestroyView).
 // Signals love.event.quit(), waits for the main loop thread to finish.
 void quit();
+
+// Returns true if Love2D is running in fragment mode (not SDLActivity).
+bool isActive();
+
+// Get the stored JavaVM (for AttachCurrentThread on non-JNI threads).
+// Returns nullptr if not in fragment mode.
+void *getJavaVM();
+
+// Get the stored Activity context (global ref).
+// Returns nullptr if not in fragment mode.
+void *getActivity();
 
 } // fragment
 } // android
