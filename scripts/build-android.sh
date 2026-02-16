@@ -90,7 +90,12 @@ cp "$BUILD_DIR/love/libliblove.so" "$DIST_DIR/liblove.so"
 cp "$BUILD_DIR/love/RelWithDebInfo/libSDL3.so" "$DIST_DIR/"
 cp "$BUILD_DIR/love/RelWithDebInfo/libopenal.so" "$DIST_DIR/"
 cp "$MEGASOURCE_DIR/libs/LuaJIT/android/${ANDROID_ABI}/libluajit.so" "$DIST_DIR/"
-# libc++_shared.so is provided by Gradle from the NDK — do not bundle.
+
+# libc++_shared.so: required since we build with -DANDROID_STL=c++_shared.
+# Gradle only auto-bundles this when externalNativeBuild is used; since babbage
+# consumes pre-built .so via jniLibs, we must include it explicitly.
+LIBCXX="${NDK_DIR}/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
+cp "$LIBCXX" "$DIST_DIR/"
 
 echo "=== Dist ==="
 echo "  Output: $DIST_DIR"
