@@ -17,9 +17,18 @@ MEGASOURCE_DIR="${RIG_DIR}/megasource"
 OBOE_DIR="${RIG_DIR}/oboe"
 BUILD_DIR="${LOVE_DIR}/build-android"
 
+# OS detection
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+
 # Android NDK configuration
 NDK_VERSION="29.0.13113456"
-NDK_DIR="${ANDROID_NDK_HOME:-${HOME}/Library/Android/sdk/ndk/${NDK_VERSION}}"
+if [ "$OS" = "Darwin" ]; then
+    NDK_DEFAULT="${HOME}/Library/Android/sdk/ndk/${NDK_VERSION}"
+else
+    NDK_DEFAULT="${HOME}/Android/Sdk/ndk/${NDK_VERSION}"
+fi
+NDK_DIR="${ANDROID_NDK_HOME:-$NDK_DEFAULT}"
 TOOLCHAIN_FILE="${NDK_DIR}/build/cmake/android.toolchain.cmake"
 ANDROID_ABI="arm64-v8a"
 ANDROID_PLATFORM="android-34"
@@ -72,7 +81,12 @@ cmake -S "$MEGASOURCE_DIR" -B "$BUILD_DIR" \
     -DOBOE_SOURCE="$OBOE_DIR"
 
 echo "=== Building ==="
-cmake --build "$BUILD_DIR" --parallel "$(sysctl -n hw.ncpu)" --target love
+if [ "$OS" = "Darwin" ]; then
+    NPROC="$(sysctl -n hw.ncpu)"
+else
+    NPROC="$(nproc)"
+fi
+cmake --build "$BUILD_DIR" --parallel "$NPROC" --target love
 
 echo "=== Build Complete ==="
 
@@ -94,7 +108,12 @@ cp "$MEGASOURCE_DIR/libs/LuaJIT/android/${ANDROID_ABI}/libluajit.so" "$DIST_DIR/
 # libc++_shared.so: required since we build with -DANDROID_STL=c++_shared.
 # Gradle only auto-bundles this when externalNativeBuild is used; since babbage
 # consumes pre-built .so via jniLibs, we must include it explicitly.
-LIBCXX="${NDK_DIR}/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
+if [ "$OS" = "Darwin" ]; then
+    NDK_HOST_TAG="darwin-x86_64"
+else
+    NDK_HOST_TAG="linux-x86_64"
+fi
+LIBCXX="${NDK_DIR}/toolchains/llvm/prebuilt/${NDK_HOST_TAG}/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
 cp "$LIBCXX" "$DIST_DIR/"
 
 echo "=== Dist ==="
