@@ -17,6 +17,28 @@ MEGASOURCE_DIR="${MEGASOURCE_DIR:-${RIG_DIR}/megasource}"
 OBOE_DIR="${OBOE_DIR:-${RIG_DIR}/oboe}"
 BUILD_DIR="${LOVE_DIR}/build-android"
 
+# Resolve git commit/branch from ref files directly.
+# orbital's rsync excludes .git/objects/ but keeps .git/HEAD and .git/refs/,
+# so git rev-parse fails but we can follow the ref chain manually.
+GIT_COMMIT="unknown"
+GIT_BRANCH="unknown"
+if [ -f "$LOVE_DIR/.git/HEAD" ]; then
+    _HEAD="$(cat "$LOVE_DIR/.git/HEAD")"
+    case "$_HEAD" in
+        ref:*)
+            _REF="${_HEAD#ref: }"
+            GIT_BRANCH="$(basename "$_REF")"
+            if [ -f "$LOVE_DIR/.git/$_REF" ]; then
+                GIT_COMMIT="$(cat "$LOVE_DIR/.git/$_REF")"
+            elif [ -f "$LOVE_DIR/.git/packed-refs" ]; then
+                GIT_COMMIT="$(grep " $_REF\$" "$LOVE_DIR/.git/packed-refs" | cut -d' ' -f1)"
+            fi
+            ;;
+        *)  GIT_COMMIT="$_HEAD"; GIT_BRANCH="HEAD" ;;
+    esac
+fi
+GIT_COMMIT="${GIT_COMMIT:-unknown}"
+
 # OS detection
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -118,6 +140,58 @@ cp "$LIBCXX" "$DIST_DIR/"
 echo "=== Dist ==="
 echo "  Output: $DIST_DIR"
 ls -lh "$DIST_DIR"
+
+# Generate build manifest for cross-repo traceability.
+# babbage logs which love2d commit it consumed.
+MANIFEST="${LOVE_DIR}/dist/android/jniLibs/manifest.json"
+BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Build file entries array
+FILE_ENTRIES=""
+for so in "$DIST_DIR"/*.so; do
+    NAME="$(basename "$so")"
+    SIZE="$(wc -c < "$so" | tr -d ' ')"
+    SHA256="$(shasum -a 256 "$so" 2>/dev/null || sha256sum "$so" 2>/dev/null)"
+    SHA256="$(echo "$SHA256" | awk '{print $1}')"
+    [ -n "$FILE_ENTRIES" ] && FILE_ENTRIES="${FILE_ENTRIES},"
+    FILE_ENTRIES="${FILE_ENTRIES}
+    {\"name\":\"${NAME}\",\"sha256\":\"${SHA256}\",\"size\":${SIZE}}"
+done
+
+cat > "$MANIFEST" <<EOF
+{
+  "project": "love2d",
+  "commit": "${GIT_COMMIT}",
+  "branch": "${GIT_BRANCH}",
+  "timestamp": "${BUILD_TS}",
+  "abi": "${ANDROID_ABI}",
+  "ndk_version": "${NDK_VERSION}",
+  "files": [${FILE_ENTRIES}
+  ]
+}
+EOF
+
+echo ""
+echo "=== Manifest ==="
+cat "$MANIFEST"
+
+# Publish to orbital shared volume for cross-repo consumption.
+SHARED_DIR="/home/claude/orbital/jniLibs/love-android"
+if [ -d "/home/claude/orbital" ]; then
+    echo ""
+    echo "=== Publishing to shared volume ==="
+    rm -rf "$SHARED_DIR"
+    mkdir -p "$SHARED_DIR"
+    cp -r "$DIST_DIR" "$SHARED_DIR/"
+    cp "$MANIFEST" "$SHARED_DIR/"
+    chmod -R g+w "$SHARED_DIR"
+    echo "  Published to: $SHARED_DIR"
+    ls -lhR "$SHARED_DIR"
+else
+    echo ""
+    echo "=== Shared volume not available, skipping publish ==="
+fi
+
 echo ""
 echo "Babbage integration: add to app/build.gradle.kts:"
 echo "  sourceSets { main { jniLibs.srcDirs += \"<path-to-lovelace>/dist/android/jniLibs\" } }"
