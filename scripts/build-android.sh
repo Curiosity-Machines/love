@@ -13,8 +13,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOVE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RIG_DIR="$(cd "$LOVE_DIR/../.." && pwd)"
-MEGASOURCE_DIR="${RIG_DIR}/megasource"
-OBOE_DIR="${RIG_DIR}/oboe"
+MEGASOURCE_DIR="${MEGASOURCE_DIR:-${RIG_DIR}/megasource}"
+OBOE_DIR="${OBOE_DIR:-${RIG_DIR}/oboe}"
 BUILD_DIR="${LOVE_DIR}/build-android"
 
 # OS detection
@@ -23,12 +23,15 @@ ARCH="$(uname -m)"
 
 # Android NDK configuration
 NDK_VERSION="29.0.13113456"
-if [ "$OS" = "Darwin" ]; then
-    NDK_DEFAULT="${HOME}/Library/Android/sdk/ndk/${NDK_VERSION}"
+if [ -n "${ANDROID_NDK_HOME:-}" ]; then
+    NDK_DIR="$ANDROID_NDK_HOME"
+elif [ -n "${ANDROID_HOME:-}" ]; then
+    NDK_DIR="${ANDROID_HOME}/ndk/${NDK_VERSION}"
+elif [ "$OS" = "Darwin" ]; then
+    NDK_DIR="${HOME}/Library/Android/sdk/ndk/${NDK_VERSION}"
 else
-    NDK_DEFAULT="${HOME}/Android/Sdk/ndk/${NDK_VERSION}"
+    NDK_DIR="${HOME}/Android/Sdk/ndk/${NDK_VERSION}"
 fi
-NDK_DIR="${ANDROID_NDK_HOME:-$NDK_DEFAULT}"
 TOOLCHAIN_FILE="${NDK_DIR}/build/cmake/android.toolchain.cmake"
 ANDROID_ABI="arm64-v8a"
 ANDROID_PLATFORM="android-34"
@@ -81,11 +84,7 @@ cmake -S "$MEGASOURCE_DIR" -B "$BUILD_DIR" \
     -DOBOE_SOURCE="$OBOE_DIR"
 
 echo "=== Building ==="
-if [ "$OS" = "Darwin" ]; then
-    NPROC="$(sysctl -n hw.ncpu)"
-else
-    NPROC="$(nproc)"
-fi
+NPROC="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
 cmake --build "$BUILD_DIR" --parallel "$NPROC" --target love
 
 echo "=== Build Complete ==="
