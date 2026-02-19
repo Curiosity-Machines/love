@@ -79,3 +79,10 @@ stamp-h1
 # Android NDK build output
 build-android/
 dist/
+
+# Gas Town (added by gt)
+.runtime/
+.claude/commands/
+.logs/
+.beads/
+state.json
