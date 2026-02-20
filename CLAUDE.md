@@ -36,5 +36,5 @@ gt nudge mayor "Check mail — I'm blocked on <topic>"
 **What happens:** Mayor coordinates across rigs and relays to the host-liaison
 (an AI agent on the host machine), who coordinates with Misha (the human overseer).
 
-**Nudges from `[host-liaison]`** (arriving as `[from unknown]`) come from the host-side
-AI liaison — not the human directly. Acknowledge and act on them.
+**Nudges from `[from host-liaison]`** come from the host-side AI liaison — not the
+human directly. Acknowledge and act on them.
